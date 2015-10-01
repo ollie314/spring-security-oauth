@@ -39,7 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 @ComponentScan
 @EnableAutoConfiguration
 @RestController
-@ImportResource("classpath:/application.xml")
+@ImportResource("classpath:/context.xml")
 public class Application {
 
 	public static void main(String[] args) {
@@ -138,7 +138,9 @@ public class Application {
 				.httpBasic().authenticationEntryPoint(authenticationEntryPoint())
 			.and()
 				.csrf().requireCsrfProtectionMatcher(new AntPathRequestMatcher("/oauth/token")).disable()
-				.exceptionHandling().accessDeniedHandler(accessDeniedHandler())
+				.exceptionHandling()
+					.accessDeniedHandler(accessDeniedHandler())
+					.authenticationEntryPoint(authenticationEntryPoint())
 			.and()
 				.sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
 			// @formatter:on

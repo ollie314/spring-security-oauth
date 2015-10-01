@@ -9,9 +9,12 @@
  */
 package org.springframework.security.oauth2.provider.token.store;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.security.KeyPair;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -26,6 +29,8 @@ import org.springframework.security.jwt.crypto.sign.RsaVerifier;
 import org.springframework.security.oauth2.common.DefaultOAuth2AccessToken;
 import org.springframework.security.oauth2.common.DefaultOAuth2RefreshToken;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
+import org.springframework.security.oauth2.common.util.JsonParser;
+import org.springframework.security.oauth2.common.util.JsonParserFactory;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
 import org.springframework.security.oauth2.provider.OAuth2Request;
 import org.springframework.security.oauth2.provider.token.AccessTokenConverter;
@@ -35,7 +40,7 @@ import org.springframework.security.oauth2.provider.token.UserAuthenticationConv
  * @author Dave Syer
  * @author Luke Taylor
  */
-public class JwtTokenEnhancerTests {
+public class JwtAccessTokenConverterTests {
 
 	private JwtAccessTokenConverter tokenEnhancer;
 
@@ -49,19 +54,24 @@ public class JwtTokenEnhancerTests {
 
 	@Test
 	public void testEnhanceAccessToken() {
-		OAuth2Authentication authentication = new OAuth2Authentication(createOAuth2Request("foo", null),
-				userAuthentication);
-		OAuth2AccessToken token = tokenEnhancer.enhance(new DefaultOAuth2AccessToken("FOO"), authentication);
+		OAuth2Authentication authentication = new OAuth2Authentication(
+				createOAuth2Request("foo", null), userAuthentication);
+		OAuth2AccessToken token = tokenEnhancer.enhance(new DefaultOAuth2AccessToken(
+				"FOO"), authentication);
 		assertNotNull(token.getValue());
-		assertEquals("FOO", token.getAdditionalInformation().get(AccessTokenConverter.JTI));
+		assertEquals("FOO", token.getAdditionalInformation()
+				.get(AccessTokenConverter.JTI));
 		String claims = JwtHelper.decode(token.getValue()).getClaims();
-		assertTrue("Wrong claims: " + claims, claims.contains("\"" + AccessTokenConverter.JTI + "\""));
-		assertTrue("Wrong claims: " + claims, claims.contains("\"" + UserAuthenticationConverter.USERNAME  + "\""));
+		assertTrue("Wrong claims: " + claims,
+				claims.contains("\"" + AccessTokenConverter.JTI + "\":\"FOO\""));
+		assertTrue("Wrong claims: " + claims,
+				claims.contains("\"" + UserAuthenticationConverter.USERNAME + "\""));
 	}
 
 	@Test
 	public void testScopePreserved() {
-		OAuth2Authentication authentication = new OAuth2Authentication(createOAuth2Request("foo", Collections.singleton("read")),
+		OAuth2Authentication authentication = new OAuth2Authentication(
+				createOAuth2Request("foo", Collections.singleton("read")),
 				userAuthentication);
 		DefaultOAuth2AccessToken original = new DefaultOAuth2AccessToken("FOO");
 		original.setScope(authentication.getOAuth2Request().getScope());
@@ -71,8 +81,9 @@ public class JwtTokenEnhancerTests {
 	}
 
 	@Test
-	public void testRefreshTokenAdded() {
-		OAuth2Authentication authentication = new OAuth2Authentication(createOAuth2Request("foo", Collections.singleton("read")),
+	public void testRefreshTokenAdded() throws Exception {
+		OAuth2Authentication authentication = new OAuth2Authentication(
+				createOAuth2Request("foo", Collections.singleton("read")),
 				userAuthentication);
 		DefaultOAuth2AccessToken original = new DefaultOAuth2AccessToken("FOO");
 		original.setScope(authentication.getOAuth2Request().getScope());
@@ -80,8 +91,36 @@ public class JwtTokenEnhancerTests {
 		OAuth2AccessToken token = tokenEnhancer.enhance(original, authentication);
 		assertNotNull(token.getValue());
 		assertNotNull(token.getRefreshToken());
-		String claims = JwtHelper.decode(token.getRefreshToken().getValue()).getClaims();
-		assertTrue("Wrong claims: " + claims, claims.contains("\"" + AccessTokenConverter.SCOPE + "\""));
+		JsonParser parser = JsonParserFactory.create();
+		Map<String, Object> claims = parser.parseMap(JwtHelper.decode(
+				token.getRefreshToken().getValue()).getClaims());
+		assertEquals(Arrays.asList("read"), claims.get(AccessTokenConverter.SCOPE));
+		assertEquals("FOO", claims.get(AccessTokenConverter.ATI));
+		assertEquals("BAR", claims.get(AccessTokenConverter.JTI));
+		tokenEnhancer.afterPropertiesSet();
+		assertTrue(tokenEnhancer.isRefreshToken(tokenEnhancer.extractAccessToken(token
+				.getRefreshToken().getValue(), tokenEnhancer.decode(token
+				.getRefreshToken().getValue()))));
+	}
+
+	@Test
+	public void testRefreshTokenAccessTokenIdWhenDoubleEnhanced() throws Exception {
+		OAuth2Authentication authentication = new OAuth2Authentication(
+				createOAuth2Request("foo", Collections.singleton("read")),
+				userAuthentication);
+		DefaultOAuth2AccessToken original = new DefaultOAuth2AccessToken("FOO");
+		original.setScope(authentication.getOAuth2Request().getScope());
+		original.setRefreshToken(new DefaultOAuth2RefreshToken("BAR"));
+		OAuth2AccessToken token = tokenEnhancer.enhance(original, authentication);
+		token = tokenEnhancer.enhance(token, authentication);
+		assertNotNull(token.getValue());
+		assertNotNull(token.getRefreshToken());
+		JsonParser parser = JsonParserFactory.create();
+		Map<String, Object> claims = parser.parseMap(JwtHelper.decode(
+				token.getRefreshToken().getValue()).getClaims());
+		assertEquals(Arrays.asList("read"), claims.get(AccessTokenConverter.SCOPE));
+		assertEquals("FOO", claims.get(AccessTokenConverter.ATI));
+		assertEquals("Wrong claims: " + claims, "BAR", claims.get(AccessTokenConverter.JTI));
 	}
 
 	@Test
@@ -96,11 +135,13 @@ public class JwtTokenEnhancerTests {
 				+ "jlzxSzwVkoZo+vef7OD6OcFLeInAHzAJAjEAs6izolK+3ETa1CRSwz0lPHQlnmdM\n"
 				+ "Y/QuR5tuPt6U/saEVuJpkn4LNRtg5qt6I4JRAjAgFRYTG7irBB/wmZFp47izXEc3\n"
 				+ "gOdvA1hvq3tlWU5REDrYt24xpviA0fvrJpwMPbECMAKDKdiDi6Q4/iBkkzNMefA8\n"
-				+ "7HX27b9LR33don/1u/yvzMUo+lrRdKAFJ+9GPE9XFA== \n" + "-----END RSA PRIVATE KEY----- ";
+				+ "7HX27b9LR33don/1u/yvzMUo+lrRdKAFJ+9GPE9XFA== \n"
+				+ "-----END RSA PRIVATE KEY----- ";
 		tokenEnhancer.setSigningKey(rsaKey);
-		OAuth2Authentication authentication = new OAuth2Authentication(createOAuth2Request("foo", null),
-				userAuthentication);
-		OAuth2AccessToken token = tokenEnhancer.enhance(new DefaultOAuth2AccessToken("FOO"), authentication);
+		OAuth2Authentication authentication = new OAuth2Authentication(
+				createOAuth2Request("foo", null), userAuthentication);
+		OAuth2AccessToken token = tokenEnhancer.enhance(new DefaultOAuth2AccessToken(
+				"FOO"), authentication);
 		JwtHelper.decodeAndVerify(token.getValue(), new RsaVerifier(rsaKey));
 	}
 
@@ -108,19 +149,20 @@ public class JwtTokenEnhancerTests {
 	public void publicKeyStringIsReturnedFromTokenKeyEndpoint() throws Exception {
 		tokenEnhancer.setVerifierKey("-----BEGIN RSA PUBLIC KEY-----\n"
 				+ "MGgCYQDk3m+AGfjcDrT4fspyIBqmulFjVXuiciYvpaD5j2XaR7c6Krm5wsBLOiUo\n"
-				+ "kmd6wbrRAMPMpoC1eogWNNoXY7Jd4eWdDVmscfHczGX13uBKXwdOCEqKqoWQsXIb\n" + "7kgz+HkCAwEAAQ==\n"
-				+ "-----END RSA PUBLIC KEY-----");
+				+ "kmd6wbrRAMPMpoC1eogWNNoXY7Jd4eWdDVmscfHczGX13uBKXwdOCEqKqoWQsXIb\n"
+				+ "7kgz+HkCAwEAAQ==\n" + "-----END RSA PUBLIC KEY-----");
 		tokenEnhancer.afterPropertiesSet();
 		Map<String, String> key = tokenEnhancer.getKey();
 		assertTrue("Wrong key: " + key, key.get("value").contains("-----BEGIN"));
 	}
 
 	@Test
-	public void publicKeyStringIsReturnedFromTokenKeyEndpointWithNullPrincipal() throws Exception {
+	public void publicKeyStringIsReturnedFromTokenKeyEndpointWithNullPrincipal()
+			throws Exception {
 		tokenEnhancer.setVerifierKey("-----BEGIN RSA PUBLIC KEY-----\n"
 				+ "MGgCYQDk3m+AGfjcDrT4fspyIBqmulFjVXuiciYvpaD5j2XaR7c6Krm5wsBLOiUo\n"
-				+ "kmd6wbrRAMPMpoC1eogWNNoXY7Jd4eWdDVmscfHczGX13uBKXwdOCEqKqoWQsXIb\n" + "7kgz+HkCAwEAAQ==\n"
-				+ "-----END RSA PUBLIC KEY-----");
+				+ "kmd6wbrRAMPMpoC1eogWNNoXY7Jd4eWdDVmscfHczGX13uBKXwdOCEqKqoWQsXIb\n"
+				+ "7kgz+HkCAwEAAQ==\n" + "-----END RSA PUBLIC KEY-----");
 		Map<String, String> key = tokenEnhancer.getKey();
 		assertTrue("Wrong key: " + key, key.get("value").contains("-----BEGIN"));
 	}
@@ -128,8 +170,7 @@ public class JwtTokenEnhancerTests {
 	@Test
 	public void sharedSecretIsReturnedFromTokenKeyEndpoint() throws Exception {
 		tokenEnhancer.setVerifierKey("someKey");
-		assertEquals("{alg=HMACSHA256, value=someKey}",
-				tokenEnhancer.getKey().toString());
+		assertEquals("{alg=HMACSHA256, value=someKey}", tokenEnhancer.getKey().toString());
 	}
 
 	@Test(expected = IllegalStateException.class)
@@ -138,19 +179,33 @@ public class JwtTokenEnhancerTests {
 		tokenEnhancer.setVerifierKey("someKey");
 		tokenEnhancer.afterPropertiesSet();
 	}
-	
+
 	@Test
 	public void rsaKeyPair() throws Exception {
-		KeyStoreKeyFactory factory = new KeyStoreKeyFactory(new ClassPathResource("keystore.jks"), "foobar".toCharArray());
+		KeyStoreKeyFactory factory = new KeyStoreKeyFactory(new ClassPathResource(
+				"keystore.jks"), "foobar".toCharArray());
 		KeyPair keys = factory.getKeyPair("test");
 		tokenEnhancer.setKeyPair(keys);
 		tokenEnhancer.afterPropertiesSet();
 		assertTrue(tokenEnhancer.getKey().get("value").contains("BEGIN PUBLIC"));
 	}
 
+	@Test
+	public void publicKeyOnlyAllowedForVerification() throws Exception {
+		tokenEnhancer.setVerifierKey("-----BEGIN RSA PUBLIC KEY-----\n"
+				+ "MGgCYQDk3m+AGfjcDrT4fspyIBqmulFjVXuiciYvpaD5j2XaR7c6Krm5wsBLOiUo\n"
+				+ "kmd6wbrRAMPMpoC1eogWNNoXY7Jd4eWdDVmscfHczGX13uBKXwdOCEqKqoWQsXIb\n"
+				+ "7kgz+HkCAwEAAQ==\n" + "-----END RSA PUBLIC KEY-----");
+		tokenEnhancer.afterPropertiesSet();
+		tokenEnhancer
+				.decode("eyJhbGciOiJSUzI1NiJ9.eyJ1c2VyX25hbWUiOiJ0ZXN0MiIsImp0aSI6IkZPTyIsImNsaWVudF9pZCI6ImZvbyJ9.b43ob1ALSIwr_J2oEnfMhsXvYkr1qVBNhigNH2zlaE1OQLhLfT-DMlFtHcyUlyap0C2n0q61SPaGE_z715TV0uTAv2YKDN4fKZz2bMR7eHLsvaaCuvs7KCOi_aSROaUG");
+		Map<String, String> key = tokenEnhancer.getKey();
+		assertTrue("Wrong key: " + key, key.get("value").contains("-----BEGIN"));
+	}
+
 	private OAuth2Request createOAuth2Request(String clientId, Set<String> scope) {
-		return new OAuth2Request(Collections.<String, String> emptyMap(), clientId, null, true, scope, null, null,
-				null, null);
+		return new OAuth2Request(Collections.<String, String> emptyMap(), clientId, null,
+				true, scope, null, null, null, null);
 	}
 
 	protected static class TestAuthentication extends AbstractAuthenticationToken {

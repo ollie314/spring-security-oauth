@@ -17,10 +17,14 @@
 package org.springframework.security.oauth2.provider.endpoint;
 
 import java.security.Principal;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
@@ -40,8 +44,10 @@ import org.springframework.security.oauth2.provider.OAuth2RequestValidator;
 import org.springframework.security.oauth2.provider.TokenRequest;
 import org.springframework.security.oauth2.provider.request.DefaultOAuth2RequestValidator;
 import org.springframework.util.StringUtils;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
@@ -66,9 +72,20 @@ public class TokenEndpoint extends AbstractEndpoint {
 
 	private OAuth2RequestValidator oAuth2RequestValidator = new DefaultOAuth2RequestValidator();
 
-	@RequestMapping(value = "/oauth/token")
+	private Set<HttpMethod> allowedRequestMethods = new HashSet<HttpMethod>(Arrays.asList(HttpMethod.POST));
+
+	@RequestMapping(value = "/oauth/token", method=RequestMethod.GET)
 	public ResponseEntity<OAuth2AccessToken> getAccessToken(Principal principal, @RequestParam
-	Map<String, String> parameters) {
+	Map<String, String> parameters) throws HttpRequestMethodNotSupportedException {
+		if (!allowedRequestMethods.contains(HttpMethod.GET)) {
+			throw new HttpRequestMethodNotSupportedException("GET");
+		}
+		return postAccessToken(principal, parameters);
+	}
+	
+	@RequestMapping(value = "/oauth/token", method=RequestMethod.POST)
+	public ResponseEntity<OAuth2AccessToken> postAccessToken(Principal principal, @RequestParam
+	Map<String, String> parameters) throws HttpRequestMethodNotSupportedException {
 
 		if (!(principal instanceof Authentication)) {
 			throw new InsufficientAuthenticationException(
@@ -138,6 +155,18 @@ public class TokenEndpoint extends AbstractEndpoint {
 		return clientId;
 	}
 
+	@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+	public ResponseEntity<OAuth2Exception> handleHttpRequestMethodNotSupportedException(HttpRequestMethodNotSupportedException e) throws Exception {
+	    logger.info("Handling error: " + e.getClass().getSimpleName() + ", " + e.getMessage());
+	    return getExceptionTranslator().translate(e);
+	}
+	
+	@ExceptionHandler(Exception.class)
+	public ResponseEntity<OAuth2Exception> handleException(Exception e) throws Exception {
+	    logger.info("Handling error: " + e.getClass().getSimpleName() + ", " + e.getMessage());
+	    return getExceptionTranslator().translate(e);
+	}
+	
 	@ExceptionHandler(ClientRegistrationException.class)
 	public ResponseEntity<OAuth2Exception> handleClientRegistrationException(Exception e) throws Exception {
 		logger.info("Handling error: " + e.getClass().getSimpleName() + ", " + e.getMessage());
@@ -145,7 +174,7 @@ public class TokenEndpoint extends AbstractEndpoint {
 	}
 
 	@ExceptionHandler(OAuth2Exception.class)
-	public ResponseEntity<OAuth2Exception> handleException(Exception e) throws Exception {
+	public ResponseEntity<OAuth2Exception> handleException(OAuth2Exception e) throws Exception {
 		logger.info("Handling error: " + e.getClass().getSimpleName() + ", " + e.getMessage());
 		return getExceptionTranslator().translate(e);
 	}
@@ -169,4 +198,7 @@ public class TokenEndpoint extends AbstractEndpoint {
 		this.oAuth2RequestValidator = oAuth2RequestValidator;
 	}
 
+	public void setAllowedRequestMethods(Set<HttpMethod> allowedRequestMethods) {
+		this.allowedRequestMethods = allowedRequestMethods;
+	}
 }

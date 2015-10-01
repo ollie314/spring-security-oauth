@@ -38,7 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 @ComponentScan
 @EnableAutoConfiguration
 @RestController
-@ImportResource("classpath:/application.xml")
+@ImportResource("classpath:/context.xml")
 public class Application {
 
 	public static void main(String[] args) {
@@ -96,8 +96,8 @@ public class Application {
 		protected void configure(HttpSecurity http) throws Exception {
 			// @formatter:off	
 			http.addFilterBefore(resourceFilter, AbstractPreAuthenticatedProcessingFilter.class)
-				// Just for laughs, apply OAuth protection to only 2 resources
-				.requestMatchers().antMatchers("/","/admin/beans")
+				// Just for laughs, apply OAuth protection to only 3 resources
+				.requestMatchers().antMatchers("/","/admin/beans","/admin/health")
 			.and()
 				.authorizeRequests()
 					.anyRequest().access("#oauth2.hasScope('read')").expressionHandler(new OAuth2WebSecurityExpressionHandler())

@@ -13,9 +13,9 @@
 
 package org.springframework.security.oauth2.provider.token;
 
+import static java.util.Collections.singleton;
 import static org.junit.Assert.*;
 
-import java.util.Collections;
 import java.util.Map;
 
 import org.junit.Before;
@@ -34,18 +34,21 @@ import org.springframework.security.oauth2.provider.RequestTokenFactory;
  */
 public class DefaultAccessTokenConverterTests {
 
+	private String ROLE_CLIENT = "ROLE_CLIENT";
+	private String ROLE_USER = "ROLE_USER";
+
 	private DefaultAccessTokenConverter converter = new DefaultAccessTokenConverter();
 
 	private UsernamePasswordAuthenticationToken userAuthentication = new UsernamePasswordAuthenticationToken("foo",
-			"bar", Collections.singleton(new SimpleGrantedAuthority("ROLE_USER")));
+			"bar", singleton(new SimpleGrantedAuthority(ROLE_USER)));
 
 	private OAuth2Request request;
 
 	@Before
 	public void init() {
 		request = RequestTokenFactory.createOAuth2Request(null, "id",
-				AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_CLIENT"), true, Collections.singleton("read"),
-				Collections.singleton("resource"), null, null, null);
+				AuthorityUtils.commaSeparatedStringToAuthorityList(ROLE_CLIENT), true, singleton("read"),
+				singleton("resource"), null, null, null);
 	}
 
 	@Test
@@ -57,8 +60,10 @@ public class DefaultAccessTokenConverterTests {
 		assertTrue(map.containsKey(AccessTokenConverter.AUD));
 		assertTrue(map.containsKey(AccessTokenConverter.SCOPE));
 		assertTrue(map.containsKey(AccessTokenConverter.AUTHORITIES));
+		assertEquals(singleton(ROLE_USER), map.get(AccessTokenConverter.AUTHORITIES));
 		OAuth2Authentication extracted = converter.extractAuthentication(map);
 		assertTrue(extracted.getOAuth2Request().getResourceIds().contains("resource"));
+		assertEquals("[ROLE_USER]", extracted.getAuthorities().toString());
 	}
 
 	@Test
@@ -70,8 +75,10 @@ public class DefaultAccessTokenConverterTests {
 		assertTrue(map.containsKey(AccessTokenConverter.AUD));
 		assertTrue(map.containsKey(AccessTokenConverter.SCOPE));
 		assertTrue(map.containsKey(AccessTokenConverter.AUTHORITIES));
+		assertEquals(singleton(ROLE_CLIENT), map.get(AccessTokenConverter.AUTHORITIES));
 		OAuth2Authentication extracted = converter.extractAuthentication(map);
 		assertTrue(extracted.getOAuth2Request().getResourceIds().contains("resource"));
+		assertEquals("[ROLE_CLIENT]", extracted.getAuthorities().toString());
 	}
 
 }

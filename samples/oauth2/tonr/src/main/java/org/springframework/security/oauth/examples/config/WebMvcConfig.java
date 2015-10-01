@@ -4,15 +4,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import javax.annotation.Resource;
-
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
-import org.springframework.context.annotation.Scope;
-import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.context.support.ConversionServiceFactoryBean;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.http.MediaType;
@@ -26,9 +22,9 @@ import org.springframework.security.oauth.examples.tonr.mvc.FacebookController;
 import org.springframework.security.oauth.examples.tonr.mvc.SparklrController;
 import org.springframework.security.oauth.examples.tonr.mvc.SparklrRedirectController;
 import org.springframework.security.oauth2.client.DefaultOAuth2ClientContext;
+import org.springframework.security.oauth2.client.OAuth2ClientContext;
 import org.springframework.security.oauth2.client.OAuth2RestTemplate;
 import org.springframework.security.oauth2.client.resource.OAuth2ProtectedResourceDetails;
-import org.springframework.security.oauth2.client.token.AccessTokenRequest;
 import org.springframework.security.oauth2.client.token.grant.client.ClientCredentialsResourceDetails;
 import org.springframework.security.oauth2.client.token.grant.code.AuthorizationCodeResourceDetails;
 import org.springframework.security.oauth2.common.AuthenticationScheme;
@@ -43,7 +39,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
 import org.springframework.web.servlet.view.ContentNegotiatingViewResolver;
 import org.springframework.web.servlet.view.InternalResourceViewResolver;
-import org.springframework.web.servlet.view.json.MappingJacksonJsonView;
+import org.springframework.web.servlet.view.json.MappingJackson2JsonView;
 
 @Configuration
 @EnableWebMvc
@@ -61,7 +57,7 @@ public class WebMvcConfig extends WebMvcConfigurerAdapter {
 		ContentNegotiationManagerFactoryBean contentNegotiationManager = new ContentNegotiationManagerFactoryBean();
 		contentNegotiationManager.addMediaType("json", MediaType.APPLICATION_JSON);
 		contentViewResolver.setContentNegotiationManager(contentNegotiationManager.getObject());
-		contentViewResolver.setDefaultViews(Arrays.<View> asList(new MappingJacksonJsonView()));
+		contentViewResolver.setDefaultViews(Arrays.<View> asList(new MappingJackson2JsonView()));
 		return contentViewResolver;
 	}
 
@@ -160,10 +156,6 @@ public class WebMvcConfig extends WebMvcConfigurerAdapter {
 		@Value("${userAuthorizationUri}")
 		private String userAuthorizationUri;
 
-		@Resource
-		@Qualifier("accessTokenRequest")
-		private AccessTokenRequest accessTokenRequest;
-
 		@Bean
 		public OAuth2ProtectedResourceDetails sparklr() {
 			AuthorizationCodeResourceDetails details = new AuthorizationCodeResourceDetails();
@@ -214,10 +206,8 @@ public class WebMvcConfig extends WebMvcConfigurerAdapter {
 		}
 
 		@Bean
-		@Scope(value = "session", proxyMode = ScopedProxyMode.INTERFACES)
-		public OAuth2RestTemplate facebookRestTemplate() {
-			OAuth2RestTemplate template = new OAuth2RestTemplate(facebook(), new DefaultOAuth2ClientContext(
-					accessTokenRequest));
+		public OAuth2RestTemplate facebookRestTemplate(OAuth2ClientContext clientContext) {
+			OAuth2RestTemplate template = new OAuth2RestTemplate(facebook(), clientContext);
 			MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter();
 			converter.setSupportedMediaTypes(Arrays.asList(MediaType.APPLICATION_JSON,
 					MediaType.valueOf("text/javascript")));
@@ -226,15 +216,13 @@ public class WebMvcConfig extends WebMvcConfigurerAdapter {
 		}
 
 		@Bean
-		@Scope(value = "session", proxyMode = ScopedProxyMode.INTERFACES)
-		public OAuth2RestTemplate sparklrRestTemplate() {
-			return new OAuth2RestTemplate(sparklr(), new DefaultOAuth2ClientContext(accessTokenRequest));
+		public OAuth2RestTemplate sparklrRestTemplate(OAuth2ClientContext clientContext) {
+			return new OAuth2RestTemplate(sparklr(), clientContext);
 		}
 
 		@Bean
-		@Scope(value = "session", proxyMode = ScopedProxyMode.INTERFACES)
-		public OAuth2RestTemplate sparklrRedirectRestTemplate() {
-			return new OAuth2RestTemplate(sparklrRedirect(), new DefaultOAuth2ClientContext(accessTokenRequest));
+		public OAuth2RestTemplate sparklrRedirectRestTemplate(OAuth2ClientContext clientContext) {
+			return new OAuth2RestTemplate(sparklrRedirect(), clientContext);
 		}
 
 		@Bean

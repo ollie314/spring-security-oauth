@@ -12,6 +12,7 @@
  */
 package org.springframework.security.oauth2.config.annotation;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -19,6 +20,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -35,9 +37,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockServletContext;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.servlet.configuration.EnableWebMvcSecurity;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
@@ -51,7 +59,10 @@ import org.springframework.security.oauth2.provider.approval.DefaultUserApproval
 import org.springframework.security.oauth2.provider.approval.TokenApprovalStore;
 import org.springframework.security.oauth2.provider.approval.UserApprovalHandler;
 import org.springframework.security.oauth2.provider.client.ClientCredentialsTokenGranter;
+import org.springframework.security.oauth2.provider.client.InMemoryClientDetailsService;
 import org.springframework.security.oauth2.provider.endpoint.AuthorizationEndpoint;
+import org.springframework.security.oauth2.provider.endpoint.TokenEndpoint;
+import org.springframework.security.oauth2.provider.error.DefaultWebResponseExceptionTranslator;
 import org.springframework.security.oauth2.provider.token.AuthorizationServerTokenServices;
 import org.springframework.security.oauth2.provider.token.DefaultTokenServices;
 import org.springframework.security.oauth2.provider.token.TokenStore;
@@ -85,12 +96,17 @@ public class AuthorizationServerConfigurationTests {
 				new Object[] { null, new Class<?>[] { AuthorizationServerVanilla.class } }, 
 				new Object[] { null, new Class<?>[] { AuthorizationServerDisableApproval.class } }, 
 				new Object[] { null, new Class<?>[] { AuthorizationServerExtras.class } }, 
-				new Object[] { null, new Class<?>[] { AuthorizationServerJdbc.class } }, 
+				new Object[] { null, new Class<?>[] { AuthorizationServerJdbc.class } },
 				new Object[] { null, new Class<?>[] { AuthorizationServerEncoder.class } }, 
 				new Object[] { null, new Class<?>[] { AuthorizationServerJwt.class } }, 
 				new Object[] { null, new Class<?>[] { AuthorizationServerWithTokenServices.class } }, 
-				new Object[] { null, new Class<?>[] { AuthorizationServerApproval.class } }, 
-				new Object[] { BeanCreationException.class,	new Class<?>[] { AuthorizationServerTypes.class } }	
+				new Object[] { null, new Class<?>[] { AuthorizationServerApproval.class } },
+				new Object[] { null, new Class<?>[] { AuthorizationServerExceptionTranslator.class } },
+				new Object[] { null, new Class<?>[] { AuthorizationServerCustomClientDetails.class } },
+				new Object[] { null, new Class<?>[] { AuthorizationServerAllowsSpecificRequestMethods.class} },
+				new Object[] { null, new Class<?>[] { AuthorizationServerAllowsOnlyPost.class} },
+				new Object[] { BeanCreationException.class, new Class<?>[] { AuthorizationServerTypes.class } },
+				new Object[] { null, new Class<?>[] { AuthorizationServerCustomGranter.class } }
 				// @formatter:on
 				);
 	}
@@ -243,6 +259,66 @@ public class AuthorizationServerConfigurationTests {
 	@Configuration
 	@EnableWebMvcSecurity
 	@EnableAuthorizationServer
+	protected static class AuthorizationServerAllowsSpecificRequestMethods extends
+			AuthorizationServerConfigurerAdapter implements Runnable {
+
+		@Autowired
+		private TokenEndpoint endpoint;
+
+		@Override
+		public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
+			// @formatter:off
+		 	clients.inMemory()
+		        .withClient("my-trusted-client")
+		            .authorizedGrantTypes("password");
+		 	// @formatter:on
+		}
+
+		@Override
+		public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
+			endpoints.allowedTokenEndpointRequestMethods(HttpMethod.GET, HttpMethod.PUT);
+		}
+
+		@Override
+		public void run() {
+			@SuppressWarnings("unchecked")
+			Set<HttpMethod> allowedRequestMethods = (Set<HttpMethod>) ReflectionTestUtils.getField(endpoint, "allowedRequestMethods");
+			assertTrue(allowedRequestMethods.contains(HttpMethod.GET));
+			assertTrue(allowedRequestMethods.contains(HttpMethod.PUT));
+			assertFalse(allowedRequestMethods.contains(HttpMethod.POST));
+		}
+	}
+
+	@Configuration
+	@EnableWebMvcSecurity
+	@EnableAuthorizationServer
+	protected static class AuthorizationServerAllowsOnlyPost extends AuthorizationServerConfigurerAdapter
+			implements Runnable {
+
+		@Autowired
+		private TokenEndpoint endpoint;
+
+		@Override
+		public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
+			// @formatter:off
+		 	clients.inMemory()
+		        .withClient("my-trusted-client")
+		            .authorizedGrantTypes("password");
+		 	// @formatter:on
+		}
+
+		@Override
+		public void run() {
+			@SuppressWarnings("unchecked")
+			Set<HttpMethod> allowedRequestMethods = (Set<HttpMethod>) ReflectionTestUtils.getField(endpoint, "allowedRequestMethods");
+			assertFalse(allowedRequestMethods.contains(HttpMethod.GET));
+			assertTrue(allowedRequestMethods.contains(HttpMethod.POST));
+		}
+	}
+
+	@Configuration
+	@EnableWebMvcSecurity
+	@EnableAuthorizationServer
 	protected static class AuthorizationServerExtras extends AuthorizationServerConfigurerAdapter implements Runnable {
 
 		private TokenStore tokenStore = new InMemoryTokenStore();
@@ -337,7 +413,7 @@ public class AuthorizationServerConfigurationTests {
 		            .authorizedGrantTypes("client_credentials");
 		 	// @formatter:on
 		}
-		
+
 		@Override
 		public void configure(AuthorizationServerSecurityConfigurer oauthServer) throws Exception {
 			oauthServer.passwordEncoder(new BCryptPasswordEncoder());
@@ -449,6 +525,67 @@ public class AuthorizationServerConfigurationTests {
 
 	@Configuration
 	@EnableWebMvcSecurity
+	@EnableAuthorizationServer
+	protected static class AuthorizationServerExceptionTranslator extends AuthorizationServerConfigurerAdapter implements Runnable {
+
+		private TokenStore tokenStore = new InMemoryTokenStore();
+
+		@Autowired
+		private ApplicationContext context;
+		
+		private DefaultWebResponseExceptionTranslator exceptionTranslator = new DefaultWebResponseExceptionTranslator();
+
+		@Override
+		public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
+			endpoints.tokenStore(tokenStore).exceptionTranslator(exceptionTranslator);
+		}
+
+		@Override
+		public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
+			// @formatter:off
+		 	clients.inMemory()
+		        .withClient("my-trusted-client")
+		            .authorizedGrantTypes("password");
+		 	// @formatter:on
+		}
+
+		@Override
+		public void run() {
+			assertEquals(exceptionTranslator, ReflectionTestUtils.getField(context.getBean(AuthorizationEndpoint.class),
+					"providerExceptionHandler"));
+		}
+
+	}
+
+	@Configuration
+	@EnableWebMvcSecurity
+	@EnableAuthorizationServer
+	protected static class AuthorizationServerCustomGranter extends
+			AuthorizationServerConfigurerAdapter implements Runnable {
+
+		@Autowired
+		private ApplicationContext context;
+
+		@Override
+		public void configure(AuthorizationServerEndpointsConfigurer endpoints)
+				throws Exception {
+			endpoints.tokenGranter(new ClientCredentialsTokenGranter(endpoints
+					.getDefaultAuthorizationServerTokenServices(), endpoints
+					.getClientDetailsService(), endpoints.getOAuth2RequestFactory()));
+		}
+
+		@Override
+		public void run() {
+			assertTrue(ReflectionTestUtils.getField(
+					context.getBean(TokenEndpoint.class), "tokenGranter") instanceof ClientCredentialsTokenGranter);
+		}
+
+	}
+
+	@Configuration
+	@EnableWebMvcSecurity
+	@EnableAuthorizationServer
+	// Stuff that can't be autowired
 	protected static class AuthorizationServerTypes extends AuthorizationServerConfigurerAdapter {
 
 		@Autowired
@@ -462,8 +599,58 @@ public class AuthorizationServerConfigurationTests {
 
 		@Override
 		public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
-			endpoints.tokenGranter(new ClientCredentialsTokenGranter(tokenServices, clientDetailsService,
-					requestFactory));
+		}
+
+	}
+
+	@Configuration
+	@EnableWebMvcSecurity
+	@EnableAuthorizationServer
+	protected static class AuthorizationServerCustomClientDetails extends AuthorizationServerConfigurerAdapter
+			implements Runnable {
+
+		@Autowired
+		private ApplicationContext context;
+
+		@Override
+		public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
+			clients.withClientDetails(new InMemoryClientDetailsService());
+		}
+
+		@Override
+		public void run() {
+			assertNotNull(context.getBean(ClientDetailsService.class));
+		}
+
+	}
+
+	@Configuration
+	@EnableWebMvcSecurity
+	@EnableAuthorizationServer
+	protected static class AuthorizationServerCustomUserDetails extends AuthorizationServerConfigurerAdapter
+			implements Runnable {
+
+		@Autowired
+		private ApplicationContext context;
+		
+		@Override
+		public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
+			endpoints.userDetailsService(userDetailsService());
+		}
+
+		private UserDetailsService userDetailsService() {
+			return new UserDetailsService() {
+				
+				@Override
+				public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+					return new User(username, "", AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_USER"));
+				}
+			};
+		}
+
+		@Override
+		public void run() {
+			assertNotNull(context.getBean(UserDetailsService.class));
 		}
 
 	}
