@@ -22,7 +22,6 @@ import java.util.Set;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.security.oauth2.common.util.OAuth2Utils;
-import org.springframework.security.oauth2.provider.AuthorizationRequest;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.condition.NameValueExpression;
 import org.springframework.web.servlet.mvc.condition.ParamsRequestCondition;
@@ -119,7 +118,7 @@ public class FrameworkEndpointHandlerMapping extends RequestMappingHandlerMappin
 
 	public FrameworkEndpointHandlerMapping() {
 		// Make sure user-supplied mappings take precedence by default (except the resource mapping)
-		setOrder(Ordered.LOWEST_PRECEDENCE - 1);
+		setOrder(Ordered.LOWEST_PRECEDENCE - 2);
 	}
 
 	/**
